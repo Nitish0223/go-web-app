@@ -5,7 +5,7 @@ replicaCount: 1
 
 image:
   repository: nitish022002/go-web-app
-  tag: "v1"
+  tag: "e5df5a2"
   pullPolicy: IfNotPresent
 
 nameOverride: ""
