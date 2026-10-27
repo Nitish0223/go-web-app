@@ -1,0 +1,83 @@
+# Default values for go-web-app-chart.
+
+# Ignored when autoscaling.enabled is true (the HPA manages replicas).
+replicaCount: 1
+
+image:
+  repository: nitish022002/go-web-app
+  tag: "v1"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: "go-web-app"
+
+podAnnotations: {}
+podLabels: {}
+
+# Port the Go app listens on inside the container.
+containerPort: 8080
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    # cert-manager watches this annotation and issues a certificate into the tls secret below.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: app.myexample.sbs
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: go-web-app-tls
+      hosts:
+        - app.myexample.sbs
+
+# Let's Encrypt issuer used by the ingress annotation above. Requires cert-manager installed in the cluster.
+certManager:
+  clusterIssuer:
+    create: true
+    name: letsencrypt-prod
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Optional: Let's Encrypt sends certificate expiry notices here.
+    email: ""
+
+# CPU requests are required for the HPA to compute utilization.
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+# The app has no "/" route, so probe /home instead.
+livenessProbe:
+  httpGet:
+    path: /home
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /home
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

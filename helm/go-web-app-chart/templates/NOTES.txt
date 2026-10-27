@@ -1,0 +1,12 @@
+{{- if .Values.ingress.enabled }}
+Point a DNS record for each host below at your ingress controller's load balancer:
+  kubectl get svc -n ingress-nginx ingress-nginx-controller
+
+Then open:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}/home
+{{- end }}
+{{- else }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "go-web-app-chart.fullname" . }} 8080:{{ .Values.service.port }}
+  Then open http://127.0.0.1:8080/home
+{{- end }}

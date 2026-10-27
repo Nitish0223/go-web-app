@@ -1,0 +1,20 @@
+{{- if .Values.certManager.clusterIssuer.create -}}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.certManager.clusterIssuer.name }}
+  labels:
+    {{- include "go-web-app-chart.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: {{ .Values.certManager.clusterIssuer.server }}
+    {{- with .Values.certManager.clusterIssuer.email }}
+    email: {{ . }}
+    {{- end }}
+    privateKeySecretRef:
+      name: {{ .Values.certManager.clusterIssuer.name }}-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: {{ .Values.ingress.className }}
+{{- end }}
