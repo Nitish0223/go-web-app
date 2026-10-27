@@ -1,0 +1,31 @@
+# Exposes the Argo CD UI/API at https://argocd.myexample.sbs through the existing ingress-nginx
+# load balancer. Requires server.insecure=true (see argocd-cmd-params-cm.yaml).
+# DNS: CNAME argocd -> the ingress-nginx-controller load balancer hostname.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    # cert-manager issues the certificate into the tls secret below.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # argocd-server runs with server.insecure=true, so nginx talks plain HTTP to it.
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - argocd.myexample.sbs
+      # Not "argocd-server-tls": Argo CD would load that name as its own server certificate.
+      secretName: argocd-ingress-tls
+  rules:
+    - host: argocd.myexample.sbs
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
