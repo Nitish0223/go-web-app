@@ -1,0 +1,127 @@
+name: CI
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      # The update-helm job commits tag bumps here; don't rebuild for them.
+      - 'helm/**'
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: nitish022002/go-web-app
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          # Uses the Go version pinned in go.mod (same as the Dockerfile).
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -o go-web-app .
+
+      - name: Test
+        run: go test -v ./...
+
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      # Runs the default linters: govet, errcheck, staticcheck, unused, ineffassign.
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+
+  push:
+    needs: [build, code-quality]
+    runs-on: ubuntu-latest
+    # DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are secrets of this environment.
+    environment: production
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set image tag
+        id: tag
+        # Short commit SHA, so every image maps back to the commit it was built from.
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  update-helm:
+    needs: push
+    runs-on: ubuntu-latest
+    # Needed to commit the new tag back to the repo, where Argo CD picks it up.
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Update image tag in Helm values
+        env:
+          TAG: ${{ needs.push.outputs.tag }}
+        run: |
+          sed -i "s/^  tag: .*/  tag: \"${TAG}\"/" helm/go-web-app-chart/values.yaml
+          grep -n "^  tag:" helm/go-web-app-chart/values.yaml
+
+      - name: Commit and push
+        env:
+          TAG: ${{ needs.push.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add helm/go-web-app-chart/values.yaml
+          if git diff --cached --quiet; then
+            echo "Tag already ${TAG}, nothing to commit."
+            exit 0
+          fi
+          git commit -m "ci: update go-web-app image tag to ${TAG} [skip ci]"
+          git push
