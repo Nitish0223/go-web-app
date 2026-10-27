@@ -1,0 +1,141 @@
+# Argo CD Application: Prometheus + Grafana (kube-prometheus-stack) in the monitoring namespace.
+# Prerequisites (applied once with kubectl, see monitoring/):
+#   - aws-ebs-csi-driver EKS add-on and the gp3 StorageClass (storageclass-gp3.yaml)
+#   - Secret monitoring/grafana-admin with keys admin-user and admin-password (not stored in git)
+# Create/update: kubectl apply -f monitoring/kube-prometheus-stack-application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 92.14.1
+    helm:
+      releaseName: kube-prometheus-stack
+      valuesObject:
+        # Alertmanager is off to save pods on the small nodes; alert rules still show in Prometheus.
+        alertmanager:
+          enabled: false
+
+        # EKS runs these control-plane components itself, so they can't be scraped.
+        kubeEtcd:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        # kube-proxy on EKS only exposes metrics on 127.0.0.1.
+        kubeProxy:
+          enabled: false
+        defaultRules:
+          rules:
+            etcd: false
+            kubeSchedulerAlerting: false
+            kubeSchedulerRecording: false
+            kubeControllerManager: false
+            kubeProxy: false
+
+        prometheusOperator:
+          # The webhook needs extra cert-patching Job pods; not worth the pod slots here.
+          admissionWebhooks:
+            enabled: false
+          tls:
+            enabled: false
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 192Mi}
+
+        prometheus:
+          prometheusSpec:
+            # Pick up ServiceMonitors/PodMonitors/rules from every namespace, not only this release's.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            retention: 7d
+            retentionSize: 8GB
+            resources:
+              requests: {cpu: 100m, memory: 300Mi}
+              limits: {memory: 800Mi}
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp3
+                  accessModes: [ReadWriteOnce]
+                  resources:
+                    requests:
+                      storage: 10Gi
+
+        grafana:
+          admin:
+            existingSecret: grafana-admin
+            userKey: admin-user
+            passwordKey: admin-password
+          persistence:
+            enabled: true
+            storageClassName: gp3
+            size: 2Gi
+          # The EBS volume can attach to one node at a time, so stop the old pod before starting the new one.
+          deploymentStrategy:
+            type: Recreate
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 300Mi}
+          grafana.ini:
+            server:
+              root_url: https://grafana.myexample.sbs
+          ingress:
+            enabled: true
+            ingressClassName: nginx
+            annotations:
+              cert-manager.io/cluster-issuer: letsencrypt-prod
+            hosts:
+              - grafana.myexample.sbs
+            tls:
+              - secretName: grafana-tls
+                hosts:
+                  - grafana.myexample.sbs
+          # Extra dashboards from grafana.com, alongside the Kubernetes dashboards the chart ships.
+          dashboardProviders:
+            dashboardproviders.yaml:
+              apiVersion: 1
+              providers:
+                - name: grafana-com
+                  orgId: 1
+                  folder: Ingress
+                  type: file
+                  disableDeletion: false
+                  editable: true
+                  options:
+                    path: /var/lib/grafana/dashboards/grafana-com
+          dashboards:
+            grafana-com:
+              nginx-ingress-controller:
+                gnetId: 9614
+                revision: 1
+                datasource: Prometheus
+
+        kube-state-metrics:
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+
+        prometheus-node-exporter:
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The chart's CRDs are too large for client-side apply's last-applied annotation.
+      - ServerSideApply=true

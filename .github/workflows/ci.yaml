@@ -9,6 +9,8 @@ on:
       - 'helm/**'
       # Argo CD cluster config, not part of the app image.
       - 'argocd/**'
+      # Prometheus/Grafana config, deployed by Argo CD.
+      - 'monitoring/**'
 
 permissions:
   contents: read
