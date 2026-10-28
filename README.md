@@ -12,7 +12,6 @@ underlying AWS infrastructure described in Terraform.
 | **Grafana** | https://grafana.myexample.sbs (GitHub login) |
 | **Container image** | [`nitish022002/go-web-app`](https://hub.docker.com/r/nitish022002/go-web-app) on Docker Hub |
 
-![Website](static/images/golang-website.png)
 
 ## Highlights
 
