@@ -160,9 +160,10 @@ spec:
           deploymentStrategy:
             type: Recreate
           resources:
-            # Grafana 13 with the bundled dashboards sits around 300Mi; less starves it and health checks time out.
-            requests: {cpu: 50m, memory: 192Mi}
-            limits: {memory: 512Mi}
+            # Grafana 13 grows to ~500Mi once heavy dashboards are opened. Near the limit it stalls,
+            # health checks time out and the ingress returns 503, so keep plenty of headroom.
+            requests: {cpu: 50m, memory: 384Mi}
+            limits: {memory: 768Mi}
           grafana.ini:
             server:
               root_url: https://grafana.myexample.sbs
