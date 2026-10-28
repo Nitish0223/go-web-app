@@ -23,3 +23,16 @@ go.work.sum
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# Terraform: local provider cache, state (may hold sensitive values) and real variable files
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

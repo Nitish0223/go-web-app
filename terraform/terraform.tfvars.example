@@ -1,0 +1,21 @@
+# Copy to terraform.tfvars and adjust. Every value here has a default in variables.tf
+# that matches the running cluster; set only what you want to change.
+
+aws_region         = "us-east-1"
+project            = "go-web-app"
+cluster_name       = "my-eks-cluster"
+kubernetes_version = "1.34"
+
+vpc_cidr             = "192.168.0.0/16"
+azs                  = ["us-east-1b", "us-east-1f"]
+public_subnet_cidrs  = ["192.168.0.0/19", "192.168.32.0/19"]
+private_subnet_cidrs = ["192.168.64.0/19", "192.168.96.0/19"]
+
+node_instance_types = ["t3.small"]
+node_min_size       = 1
+node_max_size       = 4
+node_desired_size   = 4
+
+domain                    = "myexample.sbs"
+git_repo_url              = "https://github.com/Nitish0223/go-web-app.git"
+argocd_admin_github_users = ["Nitish0223"]

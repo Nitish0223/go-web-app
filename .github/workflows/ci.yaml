@@ -11,6 +11,8 @@ on:
       - 'argocd/**'
       # Prometheus/Grafana config, deployed by Argo CD.
       - 'monitoring/**'
+      # Infrastructure code, applied separately with Terraform.
+      - 'terraform/**'
 
 permissions:
   contents: read
