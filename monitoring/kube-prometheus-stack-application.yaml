@@ -17,9 +17,66 @@ spec:
     helm:
       releaseName: kube-prometheus-stack
       valuesObject:
-        # Alertmanager is off to save pods on the small nodes; alert rules still show in Prometheus.
+        # Sends alerts by email through Gmail. The Gmail App Password is in Secret
+        # monitoring/alertmanager-gmail (key app-password), created by hand and not stored in git.
         alertmanager:
-          enabled: false
+          enabled: true
+          alertmanagerSpec:
+            replicas: 1
+            retention: 120h
+            # Mounted at /etc/alertmanager/secrets/alertmanager-gmail/.
+            secrets:
+              - alertmanager-gmail
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp3
+                  accessModes: [ReadWriteOnce]
+                  resources:
+                    requests:
+                      storage: 1Gi
+            resources:
+              requests: {cpu: 10m, memory: 32Mi}
+              limits: {memory: 128Mi}
+          config:
+            global:
+              resolve_timeout: 5m
+              smtp_smarthost: smtp.gmail.com:587
+              smtp_from: nitishrebel1013@gmail.com
+              smtp_auth_username: nitishrebel1013@gmail.com
+              smtp_auth_password_file: /etc/alertmanager/secrets/alertmanager-gmail/app-password
+              smtp_require_tls: true
+            route:
+              receiver: email
+              group_by: [alertname, namespace]
+              group_wait: 30s
+              group_interval: 5m
+              repeat_interval: 4h
+              routes:
+                # Always-firing helper alerts and info-level noise go nowhere.
+                - receiver: "null"
+                  matchers:
+                    - alertname =~ "Watchdog|InfoInhibitor"
+                - receiver: "null"
+                  matchers:
+                    - severity = "info"
+            inhibit_rules:
+              # A critical alert hides the matching warning for the same problem.
+              - source_matchers: [severity = "critical"]
+                target_matchers: [severity =~ "warning|info"]
+                equal: [namespace, alertname]
+              - source_matchers: [severity = "warning"]
+                target_matchers: [severity = "info"]
+                equal: [namespace, alertname]
+              - source_matchers: [alertname = "InfoInhibitor"]
+                target_matchers: [severity = "info"]
+                equal: [namespace]
+            receivers:
+              - name: "null"
+              - name: email
+                email_configs:
+                  - to: nitishrebel1013@gmail.com
+                    send_resolved: true
 
         # EKS runs these control-plane components itself, so they can't be scraped.
         kubeEtcd:
@@ -50,6 +107,27 @@ spec:
             limits: {memory: 192Mi}
 
         prometheus:
+          # Scrape Argo CD and cert-manager, which already expose metrics, for the custom alerts below.
+          additionalServiceMonitors:
+            - name: argocd-metrics
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: argocd-metrics
+              namespaceSelector:
+                matchNames: [argocd]
+              endpoints:
+                - port: metrics
+            - name: cert-manager
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: cert-manager
+                  app.kubernetes.io/component: controller
+              namespaceSelector:
+                matchNames: [cert-manager]
+              endpoints:
+                - port: http-metrics
+                  # Keep each certificate's own namespace label instead of cert-manager's.
+                  honorLabels: true
           prometheusSpec:
             # Pick up ServiceMonitors/PodMonitors/rules from every namespace, not only this release's.
             serviceMonitorSelectorNilUsesHelmValues: false
@@ -118,6 +196,57 @@ spec:
                 gnetId: 9614
                 revision: 1
                 datasource: Prometheus
+
+        # Alerts for this setup, on top of the chart's built-in Kubernetes rules.
+        additionalPrometheusRulesMap:
+          custom-rules:
+            groups:
+              - name: go-web-app
+                rules:
+                  - alert: GoWebAppDown
+                    expr: kube_deployment_status_replicas_available{namespace="default", deployment="go-web-app"} < 1
+                    for: 2m
+                    labels:
+                      severity: critical
+                    annotations:
+                      summary: go-web-app has no available pods
+                      description: The go-web-app Deployment in namespace default has had 0 available replicas for 2 minutes, so https://app.myexample.sbs is down.
+              - name: argocd
+                rules:
+                  - alert: ArgoCDAppOutOfSync
+                    expr: argocd_app_info{sync_status!="Synced"} == 1
+                    for: 15m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: 'Argo CD app {{ $labels.name }} is {{ $labels.sync_status }}'
+                      description: 'Argo CD application {{ $labels.name }} has not matched git for 15 minutes. Check the app in https://argocd.myexample.sbs.'
+                  - alert: ArgoCDAppUnhealthy
+                    expr: argocd_app_info{health_status!~"Healthy|Progressing"} == 1
+                    for: 15m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: 'Argo CD app {{ $labels.name }} is {{ $labels.health_status }}'
+                      description: 'Argo CD application {{ $labels.name }} has been {{ $labels.health_status }} for 15 minutes.'
+              - name: certificates
+                rules:
+                  - alert: CertificateExpiringSoon
+                    expr: certmanager_certificate_expiration_timestamp_seconds - time() < 14 * 24 * 3600
+                    for: 1h
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: 'Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in under 14 days'
+                      description: 'cert-manager normally renews 30 days before expiry, so renewal of {{ $labels.namespace }}/{{ $labels.name }} is failing. Check: kubectl -n {{ $labels.namespace }} describe certificate {{ $labels.name }}'
+                  - alert: CertificateNotReady
+                    expr: certmanager_certificate_ready_status{condition="False"} == 1
+                    for: 30m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: 'Certificate {{ $labels.namespace }}/{{ $labels.name }} is not ready'
+                      description: 'cert-manager has not been able to issue {{ $labels.namespace }}/{{ $labels.name }} for 30 minutes.'
 
         kube-state-metrics:
           resources:
