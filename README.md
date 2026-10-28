@@ -43,36 +43,7 @@ underlying AWS infrastructure described in Terraform.
 
 ## CI/CD pipeline
 
-```mermaid
-flowchart LR
-    dev([Developer]) -->|git push to main| gh[(GitHub repo)]
-
-    subgraph ci [GitHub Actions]
-        direction TB
-        build[build<br/>go build + go test]
-        quality[code-quality<br/>gofmt + golangci-lint]
-        push[push<br/>docker build + push<br/>tag = short commit SHA]
-        bump[update-helm<br/>commit new tag to values.yaml]
-        build --> push
-        quality --> push
-        push --> bump
-    end
-
-    gh --> build
-    gh --> quality
-    push -->|image| hub[(Docker Hub<br/>nitish022002/go-web-app)]
-    bump -->|"[skip ci] commit"| gh
-
-    subgraph eks [AWS EKS cluster]
-        argocd[Argo CD]
-        app[go-web-app pods]
-    end
-
-    gh -->|watches helm chart| argocd
-    argocd -->|sync| app
-    hub -->|pull image| app
-    users([Users]) -->|HTTPS| app
-```
+![CI/CD pipeline: GitHub Actions CI, Docker Hub, Argo CD GitOps, Amazon EKS and Prometheus alerting](docs/images/cicd-pipeline.png)
 
 1. A push to `main` starts the workflow in [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml).
 2. **build** and **code-quality** run in parallel: `go build`, `go test`, a `gofmt` check and `golangci-lint`.
@@ -84,50 +55,7 @@ Changes under `helm/`, `argocd/`, `monitoring/`, `terraform/` and `docs/` don't 
 
 ## Infrastructure
 
-```mermaid
-flowchart TB
-    user([Users]) -->|HTTPS| dns[DNS<br/>app / argocd / grafana .myexample.sbs]
-    dns --> lb[AWS load balancer]
-
-    subgraph aws [AWS us-east-1]
-        subgraph vpc [VPC 192.168.0.0/16]
-            subgraph public [Public subnets: us-east-1b, us-east-1f]
-                lb
-                nat[NAT gateway]
-                subgraph nodes [EKS managed node group: 4 x t3.small]
-                    ingress[ingress-nginx]
-                    subgraph ns_app [default]
-                        app[go-web-app<br/>2-5 pods, HPA]
-                    end
-                    subgraph ns_argo [argocd]
-                        argocd[Argo CD + Dex]
-                    end
-                    subgraph ns_mon [monitoring]
-                        prom[Prometheus]
-                        graf[Grafana]
-                        am[Alertmanager]
-                    end
-                    certm[cert-manager]
-                end
-            end
-            private[Private subnets]
-        end
-        cp[EKS control plane 1.34]
-        ebs[(EBS gp3 volumes)]
-    end
-
-    lb --> ingress
-    ingress --> app
-    ingress --> argocd
-    ingress --> graf
-    cp --- nodes
-    private --> nat
-    prom --> ebs
-    graf --> ebs
-    am --> ebs
-    certm -.->|Let's Encrypt certificates| ingress
-    am -->|email| gmail([Gmail])
-```
+![AWS architecture: VPC, public and private subnets, Amazon EKS namespaces, load balancer, EBS and IAM](docs/images/aws-architecture.png)
 
 - **Network**: a VPC with public and private subnets in two availability zones, an internet gateway and a NAT gateway. The worker nodes and the internet-facing load balancer sit in the public subnets.
 - **Cluster**: EKS 1.34 with a managed node group of `t3.small` nodes (80 GiB encrypted gp3 disks, IMDSv2 required). EKS add-ons: VPC CNI, kube-proxy, CoreDNS, metrics-server and the EBS CSI driver.
@@ -196,7 +124,8 @@ Terraform builds the infrastructure and the tools that GitOps needs; from there,
 ├── helm/go-web-app-chart/      Helm chart: Deployment, Service, HPA, Ingress, ClusterIssuer
 ├── argocd/                     Argo CD Application, ingress, GitHub SSO and RBAC config
 ├── monitoring/                 kube-prometheus-stack Application, alert rules, gp3 StorageClass
-└── terraform/                  AWS infrastructure as code (VPC, EKS, platform)
+├── terraform/                  AWS infrastructure as code (VPC, EKS, platform)
+└── docs/                       Architecture diagrams (PNG) and their editable sources
 ```
 
 ## Run it locally

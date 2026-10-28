@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CI/CD Pipeline</title>
+<link rel="stylesheet" href="diagram.css">
+</head>
+<body>
+<div id="canvas"></div>
+<script>
+const PERSON = '<svg viewBox="0 0 24 24"><path fill="#24292f" d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-5 0-9 2.5-9 6v2h18v-2c0-3.5-4-6-9-6z"/></svg>';
+const BELL = '<svg viewBox="0 0 24 24"><path fill="#e5534b" d="M12 2a6 6 0 0 0-6 6v3.6L4.3 15a1 1 0 0 0 .9 1.5h13.6a1 1 0 0 0 .9-1.5L18 11.6V8a6 6 0 0 0-6-6zm0 20a3 3 0 0 0 3-3H9a3 3 0 0 0 3 3z"/></svg>';
+
+window.DIAGRAM = {
+  width: 1600, height: 930,
+  title: 'CI/CD Pipeline · go-web-app',
+  subtitle: 'GitHub Actions CI → Docker Hub → GitOps with Argo CD → Amazon EKS → Prometheus alerting',
+
+  groups: [
+    { x: 250, y: 110, w: 1310, h: 330, title: 'GitHub Actions · on every push to main', badge: 'CI', color: '#58a6ff' },
+    { x: 250, y: 500, w: 1310, h: 390, title: 'GitOps delivery and monitoring', badge: 'CD', color: '#2ea043' },
+  ],
+
+  nodes: [
+    { id: 'dev', x: 120, y: 270, svg: PERSON, label: 'Developer' },
+    { id: 'repo', x: 380, y: 270, icon: 'github', label: 'GitHub', sub: 'Nitish0223/go-web-app' },
+    { id: 'build', x: 650, y: 190, icon: 'go', label: 'build', sub: 'go build · go test' },
+    { id: 'quality', x: 650, y: 350, icon: 'githubactions', label: 'code-quality', sub: 'gofmt · golangci-lint' },
+    { id: 'push', x: 940, y: 270, icon: 'docker', label: 'push', sub: 'docker buildx<br>tag = short commit SHA' },
+    { id: 'hub', x: 1240, y: 270, icon: 'docker', label: 'Docker Hub', sub: 'nitish022002/go-web-app' },
+
+    { id: 'bump', x: 380, y: 630, icon: 'githubactions', label: 'update-helm', sub: 'writes the new tag<br>to values.yaml' },
+    { id: 'chart', x: 650, y: 630, icon: 'helm', label: 'Helm chart in git', sub: 'helm/go-web-app-chart' },
+    { id: 'argocd', x: 940, y: 630, icon: 'argocd', label: 'Argo CD', sub: 'auto-sync · self-heal · prune' },
+    { id: 'eks', x: 1240, y: 630, icon: 'kubernetes', label: 'Amazon EKS', sub: 'rolling update · HPA 2–5 pods' },
+    { id: 'users', x: 1460, y: 630, svg: PERSON, label: 'Users', sub: 'app.myexample.sbs' },
+
+    { id: 'gmail', x: 650, y: 800, icon: 'gmail', label: 'Email', sub: 'warning & critical alerts' },
+    { id: 'am', x: 940, y: 800, svg: BELL, label: 'Alertmanager', sub: 'grouping · repeat · resolved' },
+    { id: 'prom', x: 1240, y: 800, icon: 'prometheus', label: 'Prometheus', sub: 'metrics & alert rules' },
+    { id: 'grafana', x: 1460, y: 800, icon: 'grafana', label: 'Grafana', sub: 'dashboards' },
+  ],
+
+  edges: [
+    { from: 'dev', to: 'repo', label: 'git push', dashed: false },
+    { from: 'repo', to: 'build', sides: ['r', 'l'], via: [[520, 270], [520, 190]] },
+    { from: 'repo', to: 'quality', sides: ['r', 'l'], via: [[520, 270], [520, 350]] },
+    { from: 'build', to: 'push', sides: ['r', 'l'], via: [[800, 190], [800, 270]] },
+    { from: 'quality', to: 'push', sides: ['r', 'l'], via: [[800, 350], [800, 270]] },
+    { from: 'push', to: 'hub', label: 'push image', color: '#58a6ff', dashed: false },
+    { from: 'push', to: 'bump', sides: ['b', 'l'], via: [[940, 470], [200, 470], [200, 630]], label: 'after a successful push', labelAt: [570, 470], color: '#2ea043' },
+    { from: 'bump', to: 'chart', label: 'commit [skip ci]', color: '#2ea043' },
+    { from: 'chart', to: 'argocd', label: 'watches git', color: '#2ea043' },
+    { from: 'argocd', to: 'eks', label: 'sync', color: '#2ea043', dashed: false },
+    { from: 'hub', to: 'eks', sides: ['b', 't'], label: 'pull image', color: '#58a6ff', labelAt: [1240, 470] },
+    { from: 'eks', to: 'users', label: 'HTTPS', dashed: false },
+    { from: 'eks', to: 'prom', sides: ['b', 't'], label: 'metrics', color: '#d29922' },
+    { from: 'prom', to: 'grafana', label: 'visualise', color: '#d29922' },
+    { from: 'prom', to: 'am', label: 'firing alerts', color: '#f78166' },
+    { from: 'am', to: 'gmail', label: 'notify', color: '#f78166', dashed: false },
+  ],
+};
+</script>
+<script src="diagram.js"></script>
+</body>
+</html>
