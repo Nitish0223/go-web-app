@@ -1,0 +1,16 @@
+# Merge patch for argocd-cm, which also holds Argo CD's built-in defaults, so it is patched
+# rather than replaced. Enables "Log in via GitHub" through Argo CD's bundled Dex.
+# Requires Secret argocd/argocd-github-oauth (keys clientID, clientSecret, label
+# app.kubernetes.io/part-of=argocd), created by hand and not stored in git.
+# GitHub OAuth App callback URL: https://argocd.myexample.sbs/api/dex/callback
+# Apply: kubectl -n argocd patch cm argocd-cm --type merge --patch-file argocd/argocd-cm-sso-patch.yaml
+data:
+  url: https://argocd.myexample.sbs
+  dex.config: |
+    connectors:
+      - type: github
+        id: github
+        name: GitHub
+        config:
+          clientID: $argocd-github-oauth:clientID
+          clientSecret: $argocd-github-oauth:clientSecret

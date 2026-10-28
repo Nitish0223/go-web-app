@@ -1,0 +1,17 @@
+# Argo CD RBAC. Any GitHub user can complete the GitHub login, so only listed users get access:
+# no policy.default means everyone else signs in with no permissions.
+# The local admin account is unaffected and stays as a break-glass login.
+# Apply: kubectl apply -f argocd/argocd-rbac-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-rbac-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Token claims RBAC matches against. Dex puts the GitHub username in preferred_username.
+  scopes: "[groups, email, preferred_username]"
+  policy.csv: |
+    g, Nitish0223, role:admin
