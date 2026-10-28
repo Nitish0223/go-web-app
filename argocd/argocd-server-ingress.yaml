@@ -16,8 +16,10 @@ spec:
   tls:
     - hosts:
         - argocd.myexample.sbs
-      # Not "argocd-server-tls": Argo CD would load that name as its own server certificate.
-      secretName: argocd-ingress-tls
+      # Must be "argocd-server-tls": Argo CD loads it as its own certificate. Otherwise, with Dex,
+      # Argo CD trusts only its self-signed cert when verifying logins via this URL and GitHub
+      # login loops back to the login page ("x509: certificate signed by unknown authority").
+      secretName: argocd-server-tls
   rules:
     - host: argocd.myexample.sbs
       http:
