@@ -1,0 +1,15 @@
+# Keep the build context to what the image needs: go.mod, the Go source and static/.
+# Everything else only slows the build and changes the layer cache for no reason.
+.git
+.github
+.claude
+argocd
+docs
+helm
+monitoring
+terraform
+Dockerfile
+.dockerignore
+*.md
+*.pdf
+*_test.go

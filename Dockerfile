@@ -9,7 +9,8 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main .
+# Build one self-contained binary. distroless has no C libraries, so cgo is turned off.
+RUN CGO_ENABLED=0 go build -o main .
 
 # Final stage
 FROM gcr.io/distroless/static-debian12
